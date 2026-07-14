@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Compressez vos images et PDF gratuitement, directement depuis votre navigateur. GoCompress - Rapide, Gratuit, Privé." />
+    <title>GoCompress - Compresseur gratuit d'images et PDF</title>
+    
+    <!-- Font Awesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
+    <!-- Google Fonts (Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet" />
+    
+    <!-- Bibliothèques tierces -->
+    <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    
+    <!-- Notre CSS -->
+    <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body>
+    <!-- ============ MODAL ============ -->
+    <div id="modal-overlay">
+        <div class="modal-glass">
+            <!-- Spinner (pendant le chargement) -->
+            <div class="modal-spinner-container">
+                <div class="modal-spinner"></div>
+                <!-- Checkmark (quand terminé) -->
+                <div class="modal-checkmark">
+                    <i class="fas fa-check"></i>
+                </div>
+            </div>
+            <h3 id="modal-title">Compression en cours...</h3>
+            <p id="modal-filename">Fichier : --</p>
+            <div class="modal-progress-bar">
+                <div id="modal-progress-fill" style="width: 0%;"></div>
+            </div>
+            <p id="modal-progress-text">0%</p>
+            
+            <!-- Résultats de compression (affichés à la fin) -->
+            <div id="modal-results" style="display: none; margin: 0.75rem 0 1rem;">
+                <div class="modal-result-row">
+                    <span class="modal-result-label">Taille avant</span>
+                    <span id="modal-size-before" class="modal-result-value">--</span>
+                </div>
+                <div class="modal-result-row">
+                    <span class="modal-result-label">Taille après</span>
+                    <span id="modal-size-after" class="modal-result-value" style="color: #22C55E;">--</span>
+                </div>
+                <div class="modal-result-row">
+                    <span class="modal-result-label">Économisé</span>
+                    <span id="modal-size-saved" class="modal-result-value" style="color: #22C55E; font-weight: 700;">--</span>
+                </div>
+            </div>
+            
+            <div class="modal-buttons">
+                <button id="modal-download-btn" style="display: none;">
+                    <i class="fas fa-download"></i> Télécharger
+                </button>
+                <button id="modal-retry-btn" style="display: none;">
+                    <i class="fas fa-rotate"></i> Réessayer
+                </button>
+                <button id="modal-close-btn" style="display: none;">
+                    <i class="fas fa-times"></i> Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ OVERLAY BLUR ============ -->
+    <div id="page-overlay"></div>
+
+    <!-- ============ CONTENU PRINCIPAL ============ -->
+    <main id="app">
+        <div class="container">
+            <!-- Logo & Titre -->
+            <div class="header">
+                <h1 class="title">GoCompress</h1>
+                <p class="subtitle">
+                    Compressez vos images et PDF gratuitement,<br />
+                    directement depuis votre navigateur.
+                </p>
+            </div>
+
+            <!-- ====== CARTE ====== -->
+            <div class="card">
+                <!-- Zone de dépôt -->
+                <div id="drop-zone" class="drop-zone">
+                    <div class="drop-content">
+                        <i class="fas fa-cloud-upload-alt drop-icon"></i>
+                        <p class="drop-text">Glissez-déposez vos fichiers ici</p>
+                        <p class="drop-subtext">ou</p>
+                        <button id="file-select-btn" class="btn-secondary">
+                            <i class="fas fa-folder-open"></i> Choisir un fichier
+                        </button>
+                        <input type="file" id="file-input" multiple accept=".png,.jpg,.jpeg,.webp,.bmp,.tiff,.pdf" style="display: none;" />
+                    </div>
+                    <div id="file-info" class="file-info" style="display: none;">
+                        <div class="file-info-icon">
+                            <i class="fas fa-file"></i>
+                        </div>
+                        <div class="file-info-details">
+                            <span id="file-name">fichier.jpg</span>
+                            <span id="file-size">2.4 Mo</span>
+                            <span id="file-type">image/jpeg</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ====== MENU ====== -->
+                <div class="menu">
+                    <div class="menu-item" data-type="image">
+                        <div class="menu-icon">
+                            <i class="fas fa-image"></i>
+                        </div>
+                        <div class="menu-text">
+                            <span class="menu-title">Compresser les images</span>
+                            <span class="menu-subtitle">PNG, JPG, JPEG, WebP, BMP, TIFF</span>
+                        </div>
+                        <div class="menu-arrow">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                    </div>
+
+                    <div class="menu-item" data-type="pdf">
+                        <div class="menu-icon">
+                            <i class="fas fa-file-pdf"></i>
+                        </div>
+                        <div class="menu-text">
+                            <span class="menu-title">Compresser les PDF</span>
+                            <span class="menu-subtitle">Réduisez la taille de vos documents</span>
+                        </div>
+                        <div class="menu-arrow">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ====== RÉSULTAT ====== -->
+                <div id="result-panel" class="result-panel" style="display: none;">
+                    <div class="result-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Taille avant</span>
+                            <span id="size-before" class="stat-value">--</span>
+                        </div>
+                        <div class="stat-arrow">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Taille après</span>
+                            <span id="size-after" class="stat-value stat-green">--</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Économisé</span>
+                            <span id="size-saved" class="stat-value stat-green">--</span>
+                        </div>
+                    </div>
+                    <button id="download-btn" class="btn-primary">
+                        <i class="fas fa-download"></i> Télécharger
+                    </button>
+                </div>
+            </div>
+
+            <!-- ====== Foire aux questions ====== -->
+            <div class="faq-section">
+                <h3>FAQ</h3>
+                <div class="faq-container">
+                    <div class="faq-item">
+                        <button class="faq-question">
+                            <span>Mes fichiers quittent-ils mon ordinateur ?</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="faq-answer">
+                            <p>Non ! Tout le traitement est effectué localement dans votre navigateur. Aucun fichier n'est envoyé à un serveur.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question">
+                            <span>Quels formats sont pris en charge ?</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="faq-answer">
+                            <p>Images : PNG, JPG, JPEG, WebP, BMP, TIFF. PDF : tous les documents PDF.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question">
+                            <span>Pourquoi certains PDF compressent-ils moins ?</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="faq-answer">
+                            <p>La compression PDF dépend du contenu. Les PDF contenant beaucoup d'images se compressent mieux que ceux composés principalement de texte.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question">
+                            <span>Mes données sont-elles enregistrées ?</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="faq-answer">
+                            <p>Aucune donnée n'est conservée. Les fichiers sont supprimés de la mémoire immédiatement après le téléchargement.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question">
+                            <span>Qui a créé GoCompress ?</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="faq-answer">
+                            <p>GoCompress a été créé par Ayang Douswe, étudiant en Licence 3 Informatique, passionné par le développement web et la cybersécurité.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ====== FOOTER ====== -->
+            <footer class="footer">
+                <span class="footer-brand">GoCompress</span>
+                <span class="footer-divider">•</span>
+                <span class="footer-credit">Créé avec ❤️ par Ayang Douswe</span>
+                <span class="footer-divider">•</span>
+                <span class="footer-student">Étudiant en Informatique</span>
+                <div class="footer-links">
+                    <a href="https://github.com/dousweayang-prog" target="_blank" aria-label="GitHub"><i class="fab fa-github"></i></a>
+                    <a href="https://www.linkedin.com/in/ayang-douswe-4814b1390/" target="_blank" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+                </div>
+            </footer>
+        </div>
+    </main>
+
+    <!-- ============ SCRIPTS ============ -->
+    <script type="module" src="assets/js/app.js"></script>
+</body>
+</html>
