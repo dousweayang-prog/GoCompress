@@ -24,126 +24,139 @@ export async function compressImage(file, quality = 80, onProgress = null) {
 
         // Détection du navigateur mobile
         const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|Windows Phone/i.test(navigator.userAgent);
-        
-        // Détection de la mémoire disponible (approximative)
         const isLowMemory = navigator.deviceMemory && navigator.deviceMemory < 4;
 
-        // Log pour débogage
-        console.log('📱 Mode mobile :', isMobile);
-        console.log('🧠 Mémoire faible :', isLowMemory);
+        // Détection du type de fichier
+        const isJPEG = file.type === 'image/jpeg' || file.name.toLowerCase().match(/\.(jpe?g)$/);
+        const isPNG = file.type === 'image/png' || file.name.toLowerCase().match(/\.(png)$/);
+        const isWebP = file.type === 'image/webp' || file.name.toLowerCase().match(/\.(webp)$/);
 
-        // Paramètres adaptés selon l'appareil
-        const options = {
-            // Taille maximale en Mo (plus strict sur mobile)
-            maxSizeMB: isMobile ? 3 : 10,
-            
-            // Taille max en pixels (important pour mobile)
-            maxWidthOrHeight: isMobile ? 2048 : 4096,
-            
-            // Utiliser Web Worker (désactivé sur mobile pour éviter les bugs)
-            useWebWorker: !isMobile && !isLowMemory,
-            
-            // Format de sortie (WebP est plus léger)
-            fileType: 'image/webp',
-            
-            // Qualité (légèrement réduite sur mobile)
-            initialQuality: isMobile ? Math.min(quality / 100, 0.75) : quality / 100,
-            
-            // Progression
-            onProgress: (progress) => {
-                if (onProgress) {
-                    onProgress(Math.round(progress));
-                }
-            },
-            
-            // Redimensionner toujours (même si l'image est petite)
-            alwaysKeepResolution: false,
-        };
+        console.log('Mode mobile :', isMobile);
+        console.log('Type de fichier :', isJPEG ? 'JPEG' : isPNG ? 'PNG' : isWebP ? 'WebP' : 'Autre');
+        console.log('Taille originale :', (file.size / 1024).toFixed(1), 'Ko');
 
-        // Compression
-        let compressedFile = await imageCompression(file, options);
-        
-        // Vérification du résultat
-        if (!compressedFile || compressedFile.size === 0) {
-            throw new Error('La compression a échoué.');
-        }
+        // 🔥 NOUVEAU : Pour les JPEG, on teste d'abord avec le format JPEG original
+        let compressedFile = null;
+        let bestFile = file;
+        let bestSize = file.size;
 
-        // 🔥 Si la taille augmente, on fait une 2ème tentative avec paramètres agressifs
-        if (compressedFile.size > file.size) {
-            console.warn('La compression a augmenté la taille, tentative avec paramètres plus agressifs...');
+        // Si c'est un JPEG, on essaie d'abord en gardant le format JPEG
+        if (isJPEG) {
+            console.log('Tentative 1 : Compression JPEG → JPEG...');
             
-            // Deuxième tentative avec des paramètres plus stricts
-            const fallbackOptions = {
-                maxSizeMB: isMobile ? 1.5 : 3,
-                maxWidthOrHeight: isMobile ? 1280 : 2048,
-                useWebWorker: false,
-                fileType: 'image/webp',
-                initialQuality: 0.6, // 60% qualité
+            const jpegOptions = {
+                maxSizeMB: isMobile ? 3 : 10,
+                maxWidthOrHeight: isMobile ? 2048 : 4096,
+                useWebWorker: !isMobile && !isLowMemory,
+                fileType: 'image/jpeg', // Garder JPEG
+                initialQuality: isMobile ? Math.min(quality / 100, 0.75) : quality / 100,
                 alwaysKeepResolution: false,
                 onProgress: (progress) => {
                     if (onProgress) {
-                        onProgress(Math.round(progress));
+                        onProgress(Math.round(progress * 0.6));
                     }
                 }
             };
-            
-            const fallbackFile = await imageCompression(file, fallbackOptions);
-            
-            // Si la 2ème tentative est meilleure, on la garde
-            if (fallbackFile.size < compressedFile.size) {
-                compressedFile = fallbackFile;
-                console.log('Compression agressive réussie !');
-            } else {
-                // Sinon, on garde l'original (mieux que d'augmenter la taille)
-                console.warn('La compression n\'a pas réduit la taille, retour à l\'original.');
-                return file;
+
+            try {
+                const jpegResult = await imageCompression(file, jpegOptions);
+                if (jpegResult && jpegResult.size < bestSize) {
+                    bestFile = jpegResult;
+                    bestSize = jpegResult.size;
+                    console.log('Compression JPEG → JPEG :', (bestSize / 1024).toFixed(1), 'Ko');
+                }
+            } catch (e) {
+                console.warn('Échec compression JPEG → JPEG :', e.message);
             }
         }
 
-        // 🔥 Vérification supplémentaire : si la taille est encore trop grande
-        if (compressedFile.size > file.size * 0.9 && file.size > 500 * 1024) {
-            console.warn('⚠️ Réduction insuffisante, tentative avec qualité plus basse...');
+        // Ensuite, on essaie WebP pour tous les types
+        console.log('Tentative 2 : Compression → WebP...');
+        
+        const webpOptions = {
+            maxSizeMB: isMobile ? 3 : 10,
+            maxWidthOrHeight: isMobile ? 2048 : 4096,
+            useWebWorker: !isMobile && !isLowMemory,
+            fileType: 'image/webp',
+            initialQuality: isMobile ? Math.min(quality / 100, 0.75) : quality / 100,
+            alwaysKeepResolution: false,
+            onProgress: (progress) => {
+                if (onProgress) {
+                    onProgress(Math.round(50 + progress * 0.4));
+                }
+            }
+        };
+
+        try {
+            const webpResult = await imageCompression(file, webpOptions);
+            if (webpResult && webpResult.size < bestSize) {
+                bestFile = webpResult;
+                bestSize = webpResult.size;
+                console.log('Compression → WebP :', (bestSize / 1024).toFixed(1), 'Ko');
+            } else if (webpResult && webpResult.size > bestSize) {
+                console.log('WebP est plus lourd (' + (webpResult.size / 1024).toFixed(1) + ' Ko) que le JPEG (' + (bestSize / 1024).toFixed(1) + ' Ko)');
+            }
+        } catch (e) {
+            console.warn('Échec compression → WebP :', e.message);
+        }
+
+        // Si la taille a augmenté ou n'a pas assez diminué, on essaie plus agressif
+        if (bestSize >= file.size * 0.85 && file.size > 300 * 1024) {
+            console.log('Tentative 3 : Compression agressive...');
             
-            // Troisième tentative avec qualité très basse
-            const ultraOptions = {
-                maxSizeMB: isMobile ? 1 : 2,
-                maxWidthOrHeight: isMobile ? 1024 : 1600,
+            const aggressiveOptions = {
+                maxSizeMB: isMobile ? 1.5 : 3,
+                maxWidthOrHeight: isMobile ? 1280 : 2048,
                 useWebWorker: false,
-                fileType: 'image/webp',
-                initialQuality: 0.4, // 40% qualité
+                fileType: isJPEG ? 'image/jpeg' : 'image/webp', // Garder le format original si c'était JPEG
+                initialQuality: 0.5, // 50% qualité
                 alwaysKeepResolution: false,
                 onProgress: (progress) => {
                     if (onProgress) {
-                        onProgress(Math.round(progress));
+                        onProgress(Math.round(90 + progress * 0.1));
                     }
                 }
             };
-            
-            const ultraFile = await imageCompression(file, ultraOptions);
-            
-            if (ultraFile.size < file.size && ultraFile.size < compressedFile.size) {
-                compressedFile = ultraFile;
-                console.log('Compression ultra réussie !');
+
+            try {
+                const aggressiveResult = await imageCompression(file, aggressiveOptions);
+                if (aggressiveResult && aggressiveResult.size < bestSize) {
+                    bestFile = aggressiveResult;
+                    bestSize = aggressiveResult.size;
+                    console.log('Compression agressive :', (bestSize / 1024).toFixed(1), 'Ko');
+                }
+            } catch (e) {
+                console.warn('Échec compression agressive :', e.message);
             }
         }
 
         // Vérification finale
-        if (compressedFile.size >= file.size && file.size > 500 * 1024) {
-            console.warn('La compression n\'a pas fonctionné, retour à l\'original.');
+        if (bestSize >= file.size && file.size > 500 * 1024) {
+            console.warn('Aucune compression n\'a réduit la taille, retour à l\'original.');
+            if (onProgress) onProgress(100);
             return file;
         }
 
+        if (bestSize >= file.size) {
+            console.log('La taille est identique ou légèrement supérieure, retour à l\'original.');
+            if (onProgress) onProgress(100);
+            return file;
+        }
+
+        const gain = ((1 - bestSize / file.size) * 100).toFixed(1);
         console.log('Compression réussie :', {
             avant: (file.size / 1024).toFixed(1) + ' Ko',
-            apres: (compressedFile.size / 1024).toFixed(1) + ' Ko',
-            gain: ((1 - compressedFile.size / file.size) * 100).toFixed(1) + '%'
+            apres: (bestSize / 1024).toFixed(1) + ' Ko',
+            gain: gain + '%'
         });
 
-        return compressedFile;
+        if (onProgress) onProgress(100);
+        return bestFile;
         
     } catch (error) {
-        console.error(' Erreur compression image:', error);
+        console.error('Erreur compression image:', error);
         // En cas d'erreur, on retourne le fichier original
+        if (onProgress) onProgress(100);
         return file;
     }
 }
@@ -228,9 +241,12 @@ export function getRecommendedSize(file) {
  */
 export function getCompressionAdvice(file) {
     const sizeMB = file.size / (1024 * 1024);
+    const isJPEG = file.type === 'image/jpeg' || file.name.toLowerCase().match(/\.(jpe?g)$/);
+    
     if (sizeMB < 0.1) return 'Cette image est déjà très légère.';
     if (sizeMB < 0.5) return 'Cette image peut être légèrement optimisée.';
     if (sizeMB < 2) return 'La compression donnera un bon résultat.';
     if (sizeMB < 5) return 'Cette image sera considérablement réduite.';
+    if (isJPEG) return 'JPEG : La compression peut varier, nous gardons la meilleure version.';
     return 'La compression réduira fortement la taille.';
 }
